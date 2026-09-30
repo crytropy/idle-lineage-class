@@ -186,6 +186,19 @@
     if (dia && document.activeElement !== dia && typeof window.pandoraGetSharedDiamonds === 'function') {
       dia.value = String(Math.max(0, Math.floor(Number(window.pandoraGetSharedDiamonds()) || 0)));
     }
+    ['str','dex','con','int','wis','cha'].forEach(function (s) {
+      var el = document.getElementById('crytropy-test-stat-' + s);
+      if (!el || document.activeElement === el) return;
+      var v;
+      try {
+        v = (typeof naturalStat === 'function')
+          ? naturalStat(s)
+          : ((player.base && player.base[s]) || 0) + ((player.alloc && player.alloc[s]) || 0) + ((player.panacea && player.panacea[s]) || 0);
+      } catch (e) {
+        v = ((player.base && player.base[s]) || 0) + ((player.alloc && player.alloc[s]) || 0) + ((player.panacea && player.panacea[s]) || 0);
+      }
+      el.value = String(Math.max(1, Math.min(60, Math.floor(Number(v) || 1))));
+    });
   }
 
   function setGold() {
@@ -250,6 +263,52 @@
     if (!result || !result.ok) return notice((result && result.error) || '龍鑽修改失敗。', true);
     refreshToolValues();
     notice('龍之鑽石已修改為 ' + n.toLocaleString() + '。');
+  }
+
+  function setAbilityStats() {
+    if (!playerReady()) return notice('請先進入角色。', true);
+    try {
+      if (typeof _respec !== 'undefined' && _respec) {
+        return notice('目前正在進行回憶蠟燭配點重置，請先確認或取消重置後再修改能力值。', true);
+      }
+    } catch (e) {}
+
+    var keys = ['str','dex','con','int','wis','cha'];
+    var labels = { str:'力量', dex:'敏捷', con:'體質', int:'智力', wis:'精神', cha:'魅力' };
+    var targets = {};
+    for (var i = 0; i < keys.length; i++) {
+      var s = keys[i];
+      var n = parseWhole('crytropy-test-stat-' + s, 1, 60);
+      if (n === null) return notice(labels[s] + '請輸入 1～60。', true);
+      targets[s] = n;
+    }
+
+    if (!player.base) player.base = {};
+    if (!player.alloc) player.alloc = { str:0, dex:0, con:0, int:0, wis:0, cha:0 };
+    if (!player.panacea) player.panacea = { str:0, dex:0, con:0, int:0, wis:0, cha:0 };
+
+    keys.forEach(function (s) {
+      var alloc = Number(player.alloc[s]) || 0;
+      var pan = Number(player.panacea[s]) || 0;
+      // 只調整 base，使自然能力值(base+alloc+萬能藥)精確等於指定值；
+      // 保留既有配點與萬能藥來源，之後仍可用原遊戲的重置/配點機制。
+      player.base[s] = targets[s] - alloc - pan;
+    });
+
+    try { if (typeof calcStats === 'function') calcStats(); } catch (e) {}
+    try {
+      if (player.mhp) player.hp = player.mhp;
+      if (player.mmp !== undefined) player.mp = player.mmp;
+    } catch (e) {}
+    try {
+      if (typeof _petEnforceCarry === 'function') {
+        _petEnforceCarry();
+        if (typeof petRosterSave === 'function') petRosterSave();
+      }
+    } catch (e) {}
+
+    saveAndRefresh();
+    notice('六項自然能力值已修改：STR ' + targets.str + ' / DEX ' + targets.dex + ' / CON ' + targets.con + ' / INT ' + targets.int + ' / WIS ' + targets.wis + ' / CHA ' + targets.cha + '。');
   }
 
   var selectedItemId = '';
@@ -372,6 +431,20 @@
         '<button id="crytropy-test-diamonds-set" type="button" style="padding:9px 16px;border:1px solid #a16207;border-radius:7px;background:#713f12;color:#fef3c7;font-weight:700;cursor:pointer">套用</button>' +
       '</div>' +
 
+      '<div style="border-top:1px solid #334155;padding-top:14px;margin-top:4px;margin-bottom:16px">' +
+        '<div style="font-size:14px;font-weight:700;color:#fde68a;margin-bottom:4px">修改能力值</div>' +
+        '<div style="font-size:11px;color:#64748b;margin-bottom:9px">修改自然能力值（不含裝備／Buff），每項 1～60；套用後會重新計算角色能力。</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">' +
+          '<label style="font-size:12px;color:#cbd5e1">STR 力量<input id="crytropy-test-stat-str" type="number" min="1" max="60" step="1" style="box-sizing:border-box;width:100%;margin-top:4px;padding:8px;background:#020617;color:#fff;border:1px solid #475569;border-radius:7px"></label>' +
+          '<label style="font-size:12px;color:#cbd5e1">DEX 敏捷<input id="crytropy-test-stat-dex" type="number" min="1" max="60" step="1" style="box-sizing:border-box;width:100%;margin-top:4px;padding:8px;background:#020617;color:#fff;border:1px solid #475569;border-radius:7px"></label>' +
+          '<label style="font-size:12px;color:#cbd5e1">CON 體質<input id="crytropy-test-stat-con" type="number" min="1" max="60" step="1" style="box-sizing:border-box;width:100%;margin-top:4px;padding:8px;background:#020617;color:#fff;border:1px solid #475569;border-radius:7px"></label>' +
+          '<label style="font-size:12px;color:#cbd5e1">INT 智力<input id="crytropy-test-stat-int" type="number" min="1" max="60" step="1" style="box-sizing:border-box;width:100%;margin-top:4px;padding:8px;background:#020617;color:#fff;border:1px solid #475569;border-radius:7px"></label>' +
+          '<label style="font-size:12px;color:#cbd5e1">WIS 精神<input id="crytropy-test-stat-wis" type="number" min="1" max="60" step="1" style="box-sizing:border-box;width:100%;margin-top:4px;padding:8px;background:#020617;color:#fff;border:1px solid #475569;border-radius:7px"></label>' +
+          '<label style="font-size:12px;color:#cbd5e1">CHA 魅力<input id="crytropy-test-stat-cha" type="number" min="1" max="60" step="1" style="box-sizing:border-box;width:100%;margin-top:4px;padding:8px;background:#020617;color:#fff;border:1px solid #475569;border-radius:7px"></label>' +
+        '</div>' +
+        '<button id="crytropy-test-stats-set" type="button" style="width:100%;margin-top:9px;padding:9px 16px;border:1px solid #a16207;border-radius:7px;background:#713f12;color:#fef3c7;font-weight:700;cursor:pointer">套用六項能力值</button>' +
+      '</div>' +
+
       '<div style="border-top:1px solid #334155;padding-top:14px">' +
         '<div style="font-size:14px;font-weight:700;color:#fde68a;margin-bottom:7px">給物品</div>' +
         '<input id="crytropy-test-item-search" type="text" autocomplete="off" placeholder="輸入物品名稱或 ID，例如：屠龍劍 / wpn_dragonslayer" style="box-sizing:border-box;width:100%;padding:9px;background:#020617;color:#fff;border:1px solid #475569;border-radius:7px">' +
@@ -393,6 +466,7 @@
     document.getElementById('crytropy-test-gold-set').addEventListener('click', setGold);
     document.getElementById('crytropy-test-level-set').addEventListener('click', setLevel);
     document.getElementById('crytropy-test-diamonds-set').addEventListener('click', setDiamonds);
+    document.getElementById('crytropy-test-stats-set').addEventListener('click', setAbilityStats);
     document.getElementById('crytropy-test-item-search').addEventListener('input', renderItemMatches);
     document.getElementById('crytropy-test-item-give').addEventListener('click', giveItem);
   }
